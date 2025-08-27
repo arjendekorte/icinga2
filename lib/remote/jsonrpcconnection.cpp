@@ -236,6 +236,11 @@ void JsonRpcConnection::SendRawMessage(const String& message)
 	});
 }
 
+void JsonRpcConnection::SetLivenessTimeout(std::chrono::milliseconds timeout)
+{
+	m_LivenessTimeout = timeout;
+}
+
 void JsonRpcConnection::SendMessageInternal(const Dictionary::Ptr& message)
 {
 	if (m_ShuttingDown) {
@@ -411,7 +416,7 @@ void JsonRpcConnection::CheckLiveness(boost::asio::yield_context yc)
 		 * leaking the connection. Therefore close it after a timeout.
 		 */
 
-		m_CheckLivenessTimer.expires_from_now(boost::posix_time::seconds((m_LivenessTimeout / 6).count()));
+		m_CheckLivenessTimer.expires_from_now(boost::posix_time::milliseconds(m_LivenessTimeout.count() / 6));
 		m_CheckLivenessTimer.async_wait(yc[ec]);
 
 		if (m_ShuttingDown) {

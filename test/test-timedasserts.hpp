@@ -60,17 +60,16 @@ using namespace std::chrono_literals;
  *
  * @return a boost assertion result.
  */
-template<class Rep, class Period>
 static boost::test_tools::assertion_result AssertWithTimeout(const std::function<bool()>& fn,
-	const std::chrono::duration<Rep, Period>& timeout, std::string_view cond)
+	const std::chrono::duration<double>& timeout, std::string_view cond)
 {
 	std::size_t iterations = timeout / 1ms;
+	auto stepDur = timeout / iterations;
 	for (std::size_t i = 0; i < iterations && !fn(); i++) {
-		std::this_thread::sleep_for(1ms);
+		std::this_thread::sleep_for(stepDur);
 	}
 	boost::test_tools::assertion_result retVal{fn()};
-	retVal.message() << "Condition (" << cond << ") not true within " << std::chrono::duration<double>(timeout).count()
-					 << "s";
+	retVal.message() << "Condition (" << cond << ") not true within " << timeout.count() << "s";
 	return retVal;
 }
 
@@ -84,20 +83,18 @@ static boost::test_tools::assertion_result AssertWithTimeout(const std::function
  *
  * @return a boost assertion result.
  */
-template<class RepStart, class PeriodStart, class RepTimeout, class PeriodTimeout>
 static boost::test_tools::assertion_result AssertEdgeWithinTimeout(const std::function<bool()>& fn,
-	const std::chrono::duration<RepStart, PeriodStart>& falseUntil,
-	const std::chrono::duration<RepTimeout, PeriodTimeout>& trueWithin, std::string_view cond)
+	const std::chrono::duration<double>& falseUntil, const std::chrono::duration<double>& trueWithin,
+	std::string_view cond)
 {
-	// TODO: just use ms
 	std::size_t iterations = falseUntil / 1ms;
+	auto stepDur = falseUntil / iterations;
 	for (std::size_t i = 0; i < iterations && !fn(); i++) {
-		std::this_thread::sleep_for(1ms);
+		std::this_thread::sleep_for(stepDur);
 	}
 	if (fn()) {
 		boost::test_tools::assertion_result retVal{false};
-		retVal.message() << "Condtion (" << cond << ") was true before "
-						 << std::chrono::duration<double>(falseUntil).count() << "s";
+		retVal.message() << "Condtion (" << cond << ") was true before " << falseUntil.count() << "s";
 		return retVal;
 	}
 	return AssertWithTimeout(fn, trueWithin, cond);
