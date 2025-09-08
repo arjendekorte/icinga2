@@ -38,7 +38,7 @@ JsonRpcConnection::JsonRpcConnection(const WaitGroup::Ptr& waitGroup, const Stri
 JsonRpcConnection::JsonRpcConnection(const WaitGroup::Ptr& waitGroup, const String& identity, bool authenticated,
 	const Shared<AsioTlsStream>::Ptr& stream, ConnectionRole role, boost::asio::io_context& io)
 	: m_Identity(identity), m_Authenticated(authenticated), m_Stream(stream), m_Role(role),
-	m_Timestamp(Utility::GetTime()), m_Seen(Utility::GetTime()), m_IoStrand(io),
+	m_Timestamp(Utility::GetTime()), m_Seen(std::chrono::steady_clock::now()), m_IoStrand(io),
 	m_OutgoingMessagesQueued(io), m_WriterDone(io), m_ShuttingDown(false), m_WaitGroup(waitGroup),
 	m_CheckLivenessTimer(io), m_HeartbeatTimer(io)
 {
@@ -81,7 +81,7 @@ void JsonRpcConnection::HandleIncomingMessages(boost::asio::yield_context yc)
 			break;
 		}
 
-		m_Seen = Utility::GetTime();
+		m_Seen = std::chrono::steady_clock::now();
 		if (m_Endpoint) {
 			m_Endpoint->AddMessageReceived(jsonString.GetLength());
 		}
@@ -411,7 +411,7 @@ void JsonRpcConnection::CheckLiveness(boost::asio::yield_context yc)
 		 * leaking the connection. Therefore close it after a timeout.
 		 */
 
-		m_CheckLivenessTimer.expires_from_now(boost::posix_time::seconds(10));
+		m_CheckLivenessTimer.expires_from_now(boost::posix_time::seconds((m_LivenessTimeout / 6).count()));
 		m_CheckLivenessTimer.async_wait(yc[ec]);
 
 		if (m_ShuttingDown) {
@@ -426,16 +426,17 @@ void JsonRpcConnection::CheckLiveness(boost::asio::yield_context yc)
 		Disconnect();
 	} else {
 		for (;;) {
-			m_CheckLivenessTimer.expires_from_now(boost::posix_time::seconds(30));
+			m_CheckLivenessTimer.expires_from_now(boost::posix_time::milliseconds((m_LivenessTimeout / 2).count()));
 			m_CheckLivenessTimer.async_wait(yc[ec]);
 
 			if (m_ShuttingDown) {
 				break;
 			}
 
-			if (m_Seen < Utility::GetTime() - 60 && (!m_Endpoint || !m_Endpoint->GetSyncing())) {
+			if (m_Seen + m_LivenessTimeout < std::chrono::steady_clock::now() &&
+				(!m_Endpoint || !m_Endpoint->GetSyncing())) {
 				Log(LogInformation, "JsonRpcConnection")
-					<<  "No messages for identity '" << m_Identity << "' have been received in the last 60 seconds.";
+					<< "No messages for identity '" << m_Identity << "' have been received in the last 60 seconds.";
 
 				Disconnect();
 				break;
